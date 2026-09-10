@@ -1,7 +1,7 @@
 """Scores router: score entry, corrections, and subject statistics."""
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 
 from st_peters_portal.database import get_session
 from st_peters_portal.dependencies import get_current_user, require_role
@@ -60,7 +60,7 @@ def enter_score(
         select(Score).where(
             Score.student_id == score_in.student_id,
             Score.subject_id == score_in.subject_id,
-            Score.term == score_in.term,
+            func.lower(Score.term) == score_in.term.lower(),
         )
     ).first()
     if existing:
@@ -148,6 +148,7 @@ def get_subject_statistics(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> SubjectStats:
     """Calculate class statistics (highest, lowest, average) for a subject in a term."""
+    term = term.strip().lower()
     subject = session.get(Subject, subject_id)
     if not subject:
         raise HTTPException(
@@ -168,7 +169,7 @@ def get_subject_statistics(
         )
 
     scores = session.exec(
-        select(Score.score).where(Score.subject_id == subject_id, Score.term == term)
+        select(Score.score).where(Score.subject_id == subject_id, func.lower(Score.term) == term)
     ).all()
 
     if not scores:

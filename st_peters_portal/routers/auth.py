@@ -54,8 +54,13 @@ def register_user(
     )
     session.add(db_user)
     session.commit()
-    session.refresh(db_user)
-    return UserRead.model_validate(db_user)
+    return UserRead(
+        id=db_user.id,  # type: ignore
+        username=db_user.username,
+        role=db_user.role,
+        full_name=db_user.full_name,
+        created_at=db_user.created_at,
+    )
 
 
 @router.post(
@@ -81,3 +86,22 @@ def login_for_access_token(
         data={"sub": user.username, "role": user.role.value, "user_id": user.id}
     )
     return TokenRead(access_token=access_token, token_type="bearer")
+
+
+@router.get(
+    "/me",
+    response_model=UserRead,
+    status_code=status.HTTP_200_OK,
+    summary="Get profile of currently authenticated user",
+)
+def get_current_user_profile(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> UserRead:
+    """Retrieve details of the user currently authenticated via the Bearer token."""
+    return UserRead(
+        id=current_user.id,  # type: ignore
+        username=current_user.username,
+        role=current_user.role,
+        full_name=current_user.full_name,
+        created_at=current_user.created_at,
+    )

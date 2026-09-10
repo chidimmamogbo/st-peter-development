@@ -1,18 +1,21 @@
 """Seed script: initializes database and populates sample demo accounts and data."""
 from datetime import datetime, timezone
-from sqlmodel import Session, select
-
 from st_peters_portal.database import create_db_and_tables, engine
+from sqlmodel import SQLModel, Session, select
 from st_peters_portal.models import Role, Score, Student, Subject, SubjectEnrollment, User
 from st_peters_portal.security import hash_password
 
 
-def seed_database() -> None:
+def seed_database(custom_engine=None) -> None:
     """Populate initial demo data for St. Peter's Result Portal."""
+    target_engine = custom_engine or engine
     print("Creating tables...")
-    create_db_and_tables()
+    if custom_engine is None:
+        create_db_and_tables()
+    else:
+        SQLModel.metadata.create_all(target_engine)
 
-    with Session(engine) as session:
+    with Session(target_engine) as session:
         # Check if already seeded
         if session.exec(select(User)).first():
             print("Database already contains data. Skipping seed.")
@@ -117,8 +120,8 @@ def seed_database() -> None:
         ]
         session.add_all(enrollments)
 
-        # 7. Scores for 2026-Term1
-        term = "2026-Term1"
+        # 7. Scores for 2026-term1
+        term = "2026-term1"
         scores = [
             # Ada: High performer
             Score(student_id=student_ada.id, subject_id=sub_math.id, term=term, score=88),  # type: ignore

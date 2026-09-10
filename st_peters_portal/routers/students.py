@@ -1,7 +1,7 @@
 """Student management and student result query router."""
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 
 from st_peters_portal.database import get_session
 from st_peters_portal.dependencies import get_current_user, require_role
@@ -149,6 +149,7 @@ def get_student_results(
     - If caller is an exams officer: allowed to inspect any student's results.
     - If caller is a teacher: forbidden (403), teachers only see their own subjects.
     """
+    term = term.strip().lower()
     target_student = session.get(Student, student_id)
     if not target_student:
         # If student tries to guess, brief explicitly says: Attempting another student's results is a 403, not a 404
@@ -174,7 +175,7 @@ def get_student_results(
             )
 
         # Ensure term is published
-        pub = session.exec(select(ResultPublication).where(ResultPublication.term == term)).first()
+        pub = session.exec(select(ResultPublication).where(func.lower(ResultPublication.term) == term)).first()
         if not pub or not pub.published_at:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -189,7 +190,7 @@ def get_student_results(
 
     # Fetch scores
     scores = session.exec(
-        select(Score).where(Score.student_id == student_id, Score.term == term)
+        select(Score).where(Score.student_id == student_id, func.lower(Score.term) == term)
     ).all()
 
     target_user = session.get(User, target_student.user_id)

@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from typing import Annotated, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 
 from st_peters_portal.background import notify_students_on_publication
 from st_peters_portal.database import get_session
@@ -44,8 +44,9 @@ def publish_term_results(
     - Immediately returns HTTP 200 to the exams officer.
     - Dispatches a background task to write notification records per student.
     """
+    term = term.strip().lower()
     publication = session.exec(
-        select(ResultPublication).where(ResultPublication.term == term)
+        select(ResultPublication).where(func.lower(ResultPublication.term) == term)
     ).first()
 
     if publication and publication.published_at is not None:
@@ -95,7 +96,8 @@ def get_students_below_threshold(
     threshold: Annotated[int, Query(description="Score threshold (default 40)", ge=0, le=100)] = 40,
 ) -> list[StudentBelowThreshold]:
     """Identify students failing any subject (score below threshold, default 40)."""
-    query = select(Score).where(Score.term == term, Score.score < threshold)
+    term = term.strip().lower()
+    query = select(Score).where(func.lower(Score.term) == term, Score.score < threshold)
     if subject_id is not None:
         query = query.where(Score.subject_id == subject_id)
 
@@ -139,7 +141,7 @@ def list_notifications(
     """
     query = select(NotificationLog)
     if term:
-        query = query.where(NotificationLog.term == term)
+        query = query.where(func.lower(NotificationLog.term) == term.strip().lower())
     query = query.order_by(NotificationLog.id.desc())  # type: ignore
 
     logs = session.exec(query).all()

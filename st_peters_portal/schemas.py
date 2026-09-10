@@ -1,7 +1,7 @@
 """Pydantic schemas and Extra Models pattern for St. Peter's Result Portal."""
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from st_peters_portal.models import Role
 
 
@@ -45,6 +45,8 @@ class UserRead(BaseModel):
     role: Role
     full_name: str
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TokenRead(BaseModel):
@@ -131,15 +133,20 @@ class EnrollmentRead(BaseModel):
 class ScoreCreate(BaseModel):
     student_id: int = Field(..., examples=[1])
     subject_id: int = Field(..., examples=[1])
-    term: str = Field(..., examples=["2026-Term1"])
+    term: str = Field(..., examples=["2026-term1"])
     score: int = Field(..., ge=0, le=100, examples=[85])
+
+    @field_validator("term")
+    @classmethod
+    def normalize_term(cls, v: str) -> str:
+        return v.strip().lower()
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "student_id": 1,
                 "subject_id": 1,
-                "term": "2026-Term1",
+                "term": "2026-term1",
                 "score": 85,
             }
         }

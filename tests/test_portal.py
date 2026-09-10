@@ -140,6 +140,38 @@ def test_protected_route_without_token():
     assert res.status_code == 401
 
 
+def test_register_user_by_officer_success():
+    officer_token = get_token("test_officer")
+    res = client.post(
+        "/auth/register",
+        headers={"Authorization": f"Bearer {officer_token}"},
+        json={
+            "username": "new_teacher",
+            "password": "Password123!",
+            "role": "teacher",
+            "full_name": "New Teacher",
+        },
+    )
+    assert res.status_code == 201
+    data = res.json()
+    assert data["username"] == "new_teacher"
+    assert "hashed_password" not in data
+    assert "password" not in data
+
+    # Attempt duplicate registration -> 409
+    dup_res = client.post(
+        "/auth/register",
+        headers={"Authorization": f"Bearer {officer_token}"},
+        json={
+            "username": "new_teacher",
+            "password": "Password123!",
+            "role": "teacher",
+            "full_name": "New Teacher",
+        },
+    )
+    assert dup_res.status_code == 409
+
+
 def test_role_enforcement_403_for_wrong_role():
     student_token = get_token("test_student1")
     # Student attempting exams officer endpoint
@@ -264,7 +296,7 @@ def test_publish_term_and_background_task():
         headers={"Authorization": f"Bearer {officer_token}"},
     )
     assert res.status_code == 200
-    assert res.json()["term"] == "2026-Term1"
+    assert res.json()["term"] == "2026-term1"
 
     # Re-publishing same term returns 409
     res_dup = client.post(
@@ -285,6 +317,13 @@ def test_publish_term_and_background_task():
 
 def test_student_viewing_published_results():
     student1_token = get_token("test_student1")
+    # Verify case-insensitivity: both 2026-term1 and 2026-Term1 succeed
+    res_lower = client.get(
+        "/students/1/results?term=2026-term1",
+        headers={"Authorization": f"Bearer {student1_token}"},
+    )
+    assert res_lower.status_code == 200
+
     res = client.get(
         "/students/1/results?term=2026-Term1",
         headers={"Authorization": f"Bearer {student1_token}"},

@@ -1,7 +1,7 @@
 """Background task workers for St. Peter's Result Portal."""
 from datetime import datetime, timezone
 from pathlib import Path
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 
 from st_peters_portal import database as db
 from st_peters_portal.models import NotificationLog, Score, Student
@@ -18,7 +18,7 @@ def notify_students_on_publication(term: str) -> None:
     with Session(db.engine) as session:
         # Find distinct student IDs who have scores for this term
         student_ids = session.exec(
-            select(Score.student_id).where(Score.term == term).distinct()
+            select(Score.student_id).where(func.lower(Score.term) == term.strip().lower()).distinct()
         ).all()
 
         notifications: list[NotificationLog] = []
