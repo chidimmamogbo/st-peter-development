@@ -79,10 +79,8 @@ These are standard numbers the server shouts back to the client:
 ### Code breakdown line by line:
 
 ```python
-from collections.abc import Generator
 from sqlmodel import Session, SQLModel, create_engine
 ```
-* `from collections.abc import Generator`: This tells Python we are writing a function that "yields" (hands over) an item, pauses, and then finishes cleaning up later.
 * `from sqlmodel import Session, SQLModel, create_engine`: 
   * `create_engine`: The tool that opens the file connection to SQLite.
   * `Session`: Think of a session like a single shopping cart. You put items into the cart (new scores or users), and then you "commit" (check out at the cash register) to save them into the database.
@@ -111,7 +109,7 @@ def create_db_and_tables() -> None:
 * When the app wakes up, this function checks: *"Do the tables exist yet? If not, build them now!"*
 
 ```python
-def get_session() -> Generator[Session, None, None]:
+def get_session():
     with Session(engine) as session:
         yield session
 ```
@@ -364,7 +362,7 @@ def get_current_user(
 * If valid, it finds the matching `User` in the database and hands it over to the route!
 
 ```python
-def require_role(*allowed_roles: Role) -> Callable[[User], User]:
+def require_role(*allowed_roles: Role):
     def role_checker(current_user: Annotated[User, Depends(get_current_user)]) -> User:
         if current_user.role not in allowed_roles:
             raise HTTPException(
@@ -419,7 +417,7 @@ def notify_students_on_publication(term: str) -> None:
 
 ```python
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI):
     create_db_and_tables()
     yield
 ```

@@ -1,5 +1,4 @@
 """Reusable FastAPI dependencies for authentication and role-based access control."""
-from collections.abc import Callable
 from typing import Annotated
 from fastapi import Depends, HTTPException, status
 from jwt.exceptions import InvalidTokenError
@@ -34,7 +33,7 @@ def get_current_user(
     return user
 
 
-def require_role(*allowed_roles: Role) -> Callable[[User], User]:
+def require_role(*allowed_roles: Role):
     """Dependency factory enforcing caller role membership. Raises 403 if disallowed."""
     def role_checker(current_user: Annotated[User, Depends(get_current_user)]) -> User:
         if current_user.role not in allowed_roles:

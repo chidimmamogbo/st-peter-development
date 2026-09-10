@@ -1,6 +1,5 @@
 """Main application entrypoint: sets up FastAPI, middleware, and router inclusion."""
 import time
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +10,7 @@ from st_peters_portal.routers import auth, results, scores, students, subjects
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI):
     """Lifespan context manager: initializes database schema on startup."""
     create_db_and_tables()
     yield

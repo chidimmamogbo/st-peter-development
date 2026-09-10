@@ -1,5 +1,3 @@
-"""Database engine, table initialization, and session dependency."""
-from collections.abc import Generator
 from sqlmodel import Session, SQLModel, create_engine
 
 DATABASE_URL = "sqlite:///./st_peters.db"
@@ -17,7 +15,7 @@ def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
 
 
-def get_session() -> Generator[Session, None, None]:
+def get_session():
     """Provide a transactional database session per request."""
     with Session(engine) as session:
         yield session
