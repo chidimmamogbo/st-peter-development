@@ -11,49 +11,109 @@ A centralized, secure, role-governed academic results backend for **St. Peter's 
 
 ---
 
-## 2. Getting Started for Teammates (Clone & Setup)
+## 2. Teammate Guide: Setup & `uv` Installations Tutorial
 
-Follow these steps to clone and run the project locally on your machine.
+This section walks every team member through how the project is created, what packages must be installed with `uv`, and what each library does.
 
-### Step 1: Install `uv` (Fast Python Package & Environment Manager)
-If you don't already have `uv` installed:
-* **Windows (PowerShell):**
-  ```powershell
-  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
-* **macOS / Linux:**
-  ```bash
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  ```
+### A. Prerequisites: Install `uv` & Python 3.14
+`uv` is an extremely fast package and virtual environment manager from Astral.
 
-### Step 2: Clone the Repository
+1. **Install `uv`:**
+   * **Windows (PowerShell):**
+     ```powershell
+     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+     ```
+   * **macOS / Linux:**
+     ```bash
+     curl -LsSf https://astral.sh/uv/install.sh | sh
+     ```
+
+2. **Install Python 3.14 (managed by `uv`):**
+   ```bash
+   uv python install 3.14
+   ```
+
+---
+
+### B. Cloning the Project
 ```bash
 git clone <YOUR_TEAM_REPO_URL>
 cd "St. Peter's Result Portal"
 ```
 
-### Step 3: Install Python 3.14 & Sync Project Dependencies
-`uv` automatically downloads Python 3.14 if needed, creates an isolated virtual environment (`.venv`), and installs all locked dependencies from `uv.lock`:
-```bash
-uv python install 3.14
-uv sync
-```
+---
 
-### Step 4: Seed the Database with Demo Accounts
-Initialize the SQLite database and populate the pre-configured demo users, subjects, enrollments, and test scores:
+### C. All Packages & Installations Run with `uv` (How It Was Built)
+
+Here are the exact `uv` commands used to initialize the project and install each backend component:
+
+#### 1. Initialize the Project Structure
+```bash
+uv init --bare --name st_peters_portal --python 3.14
+```
+*Creates the project root pinned to Python 3.14 with package name `st_peters_portal`.*
+
+#### 2. Install FastAPI (Web Framework & Standard Server Tools)
+```bash
+uv add "fastapi[standard]"
+```
+* **What it does:** Installs FastAPI alongside `uvicorn[standard]` (ASGI server), `pydantic` v2 (data validation), `starlette`, and multipart support for OAuth2 forms.
+
+#### 3. Install SQLModel (Database ORM)
+```bash
+uv add sqlmodel
+```
+* **What it does:** Installs SQLModel (by Tiangolo), integrating SQLAlchemy 2.0 and Pydantic v2 into single table definitions with relational queries.
+
+#### 4. Install Authentication & Security Tools
+```bash
+uv add "pyjwt[crypto]"
+uv add bcrypt
+```
+* **What they do:**
+  * `"pyjwt[crypto]"`: Generates and verifies signed stateless JWT bearer tokens.
+  * `bcrypt`: Provides secure, salt-hashed password storage (modern, non-deprecated alternative to passlib).
+
+#### 5. Install Automated Testing Tools
+```bash
+uv add pytest httpx
+```
+* **What they do:**
+  * `pytest`: Test runner.
+  * `httpx`: Provides the HTTP client engine used by FastAPI's `TestClient`.
+
+> [!TIP]
+> **One-Line Install Option for Teammates:**  
+> If you are setting up the project from scratch, you can install all required packages at once:
+> ```bash
+> uv add "fastapi[standard]" sqlmodel "pyjwt[crypto]" bcrypt pytest httpx
+> ```
+> 
+> If you have **cloned** this repository, `uv` already reads `pyproject.toml` and `uv.lock`. You simply run:
+> ```bash
+> uv sync
+> ```
+> This automatically creates `.venv` and downloads the exact locked package versions.
+
+---
+
+### D. Running the Backend & Seeding Data
+
+#### Step 1: Seed the Database
+Initialize SQLite tables and populate demo accounts (exams officer, teachers, students, subjects, and sample grades):
 ```bash
 uv run python -m st_peters_portal.seed
 ```
 
-### Step 5: Start the FastAPI Development Server
+#### Step 2: Start the FastAPI Development Server
 ```bash
 uv run fastapi dev st_peters_portal/main.py
 ```
-* The API will start running at: `http://127.0.0.1:8000`
-* **Interactive Swagger UI (Runs the entire demo):** **`http://127.0.0.1:8000/docs`**
+* API Server runs on: `http://127.0.0.1:8000`
+* **Interactive Swagger Documentation:** **`http://127.0.0.1:8000/docs`**
 
-### Step 6: Verify with Automated Tests
-Run the 14-test test suite covering all Hackathon Bar requirements:
+#### Step 3: Run the Automated Test Suite
+Verify that all 14 Hackathon Bar test assertions pass:
 ```bash
 uv run pytest tests/ -v
 ```
