@@ -721,6 +721,70 @@ In academic administration, users often type terms in various casings:
   ]
   ```
 
+### Step 7.4 [BONUS FEATURE]: Filter Scores by Term Query (`?term=`)
+* **Endpoint**: `GET /scores`
+* **Action**:
+  1. Expand `GET /scores`.
+  2. Click **Try it out**.
+  3. `term`: `2026-Term1`
+  4. Click **Execute**.
+* **Expected Status**: `200 OK`
+* **Talking Point**: *"Bonus Feature 1: The `?term=` filter allows administrators and teachers to quickly query all recorded scores for a specific academic session, respecting departmental boundaries."*
+
+### Step 7.5 [BONUS FEATURE]: Class Ranking Endpoint
+* **Endpoint**: `GET /results/rankings`
+* **Action**:
+  1. Expand `GET /results/rankings`.
+  2. Click **Try it out**.
+  3. `term`: `2026-Term1`
+  4. Optional: set `class_level`: `SS2`
+  5. Click **Execute**.
+* **Expected Status**: `200 OK`
+* **Response Body**:
+  ```json
+  {
+    "term": "2026-term1",
+    "class_level": "SS2",
+    "total_students": 3,
+    "rankings": [
+      {
+        "rank": 1,
+        "student_id": 1,
+        "student_name": "Ada Daniel",
+        "admission_no": "STP/2026/001",
+        "class_level": "SS2",
+        "total_score": 259,
+        "subjects_count": 3,
+        "average_score": 86.33,
+        "grade": "A"
+      },
+      {
+        "rank": 2,
+        "student_id": 3,
+        "student_name": "Chidinma Kalu",
+        "admission_no": "STP/2026/003",
+        "class_level": "SS2",
+        "total_score": 100,
+        "subjects_count": 2,
+        "average_score": 50.0,
+        "grade": "C"
+      },
+      {
+        "rank": 3,
+        "student_id": 2,
+        "student_name": "Obi Daniel",
+        "admission_no": "STP/2026/002",
+        "class_level": "SS2",
+        "total_score": 88,
+        "subjects_count": 2,
+        "average_score": 44.0,
+        "grade": "D"
+      }
+    ]
+  }
+  ```
+* **Talking Point**: *"Bonus Feature 2: Automated class ranking! The system computes overall GPA averages for every student in the term, breaks ties using cumulative total score, and outputs official 1st, 2nd, and 3rd positions."*
+
 ---
 
 ## 11. Summary Matrix of All Test Scenarios & Status Codes
@@ -753,6 +817,8 @@ In academic administration, users often type terms in various casings:
 | **24** | `GET /students/{id}/results` | Student | View published own results | **`200 OK`** | Displays subjects, grades & GPA average |
 | **25** | `GET /students/{id}/results` | Student | Query with `2026-Term1` vs `2026-term1` | **`200 OK`** | Case-insensitive term resolution |
 | **26** | `GET /results/below` | Exams Officer | Students below threshold (< 40) | **`200 OK`** | Institutional academic diagnostic report |
+| **27** | `GET /scores` | Teachers / Officer | Filter scores by `?term=` [BONUS] | **`200 OK`** | Bonus term query filter with teacher isolation |
+| **28** | `GET /results/rankings` | Officer / Teachers / Students | Class ranking by term [BONUS] | **`200 OK`** | Bonus class ranking with GPA and tie-breaking |
 
 ---
 

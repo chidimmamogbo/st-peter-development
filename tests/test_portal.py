@@ -348,3 +348,53 @@ def test_failing_students_below_40_report():
     assert failing[0]["student_id"] == 2
     assert failing[0]["score"] == 35
     assert failing[0]["grade"] == "F"
+
+
+# ---------------------------------------------------------------------------
+# Bonus Features Tests: ?term= filter and Class Ranking Endpoint
+# ---------------------------------------------------------------------------
+def test_bonus_term_filter_on_scores():
+    officer_token = get_token("test_officer")
+    res = client.get(
+        "/scores?term=2026-Term1",
+        headers={"Authorization": f"Bearer {officer_token}"},
+    )
+    assert res.status_code == 200
+    scores = res.json()
+    assert len(scores) >= 2
+
+    # Verify teacher only sees their assigned subject scores
+    teacher1_token = get_token("test_teacher1")
+    res_teacher = client.get(
+        "/scores?term=2026-Term1",
+        headers={"Authorization": f"Bearer {teacher1_token}"},
+    )
+    assert res_teacher.status_code == 200
+    for sc in res_teacher.json():
+        assert sc["subject_id"] == 1
+
+
+def test_bonus_class_ranking_endpoint():
+    officer_token = get_token("test_officer")
+    res = client.get(
+        "/results/rankings?term=2026-Term1",
+        headers={"Authorization": f"Bearer {officer_token}"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["term"] == "2026-term1"
+    assert data["total_students"] >= 2
+    rankings = data["rankings"]
+    # Check rank order: rank 1 has highest average score
+    assert rankings[0]["rank"] == 1
+    assert rankings[0]["average_score"] >= rankings[1]["average_score"]
+
+    # Verify student can also view published class rankings
+    student1_token = get_token("test_student1")
+    res_student = client.get(
+        "/results/rankings?term=2026-Term1",
+        headers={"Authorization": f"Bearer {student1_token}"},
+    )
+    assert res_student.status_code == 200
+    assert res_student.json()["total_students"] == data["total_students"]
+

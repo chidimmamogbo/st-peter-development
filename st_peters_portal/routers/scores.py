@@ -1,5 +1,5 @@
 """Scores router: score entry, corrections, and subject statistics."""
-from typing import Annotated
+from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select, func
 
@@ -15,6 +15,66 @@ from st_peters_portal.schemas import (
 )
 
 router = APIRouter(prefix="/scores", tags=["Scores"])
+
+
+@router.get(
+    "",
+    response_model=list[ScoreRead],
+    status_code=status.HTTP_200_OK,
+    summary="List and filter scores by term, subject, or student (Bonus ?term= filter)",
+)
+def list_scores(
+    session: Annotated[Session, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    term: Annotated[Optional[str], Query(description="Filter scores by term, e.g. '2026-Term1'")] = None,
+    subject_id: Annotated[Optional[int], Query(description="Filter by subject ID")] = None,
+    student_id: Annotated[Optional[int], Query(description="Filter by student ID")] = None,
+) -> list[ScoreRead]:
+    """
+    Bonus Endpoint: List scores with optional ?term=, ?subject_id=, and ?student_id= filters.
+    - Teachers can only view scores for subjects assigned to them.
+    - Exams Officers can view all scores across the institution.
+    - Students are forbidden (403) from querying the bulk scores endpoint.
+    """
+    if current_user.role == Role.STUDENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Students cannot access raw score lists. View your term report card instead.",
+        )
+
+    query = select(Score)
+
+    # Departmental isolation for teachers
+    if current_user.role == Role.TEACHER:
+        teacher_subjects = session.exec(
+            select(Subject.id).where(Subject.teacher_id == current_user.id)
+        ).all()
+        query = query.where(Score.subject_id.in_(teacher_subjects))
+
+    if term:
+        query = query.where(func.lower(Score.term) == term.strip().lower())
+    if subject_id is not None:
+        query = query.where(Score.subject_id == subject_id)
+    if student_id is not None:
+        query = query.where(Score.student_id == student_id)
+
+    scores = session.exec(query).all()
+    results: list[ScoreRead] = []
+    for sc in scores:
+        subj = session.get(Subject, sc.subject_id)
+        results.append(
+            ScoreRead(
+                id=sc.id,  # type: ignore
+                student_id=sc.student_id,
+                subject_id=sc.subject_id,
+                subject_name=subj.name if subj else "Unknown",
+                term=sc.term,
+                score=sc.score,
+                grade=compute_grade(sc.score),
+                created_at=sc.created_at,
+            )
+        )
+    return results
 
 
 @router.post(

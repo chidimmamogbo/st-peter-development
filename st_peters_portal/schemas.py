@@ -231,3 +231,26 @@ class NotificationRead(BaseModel):
     student_id: int
     message: str
     created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Bonus: Class Ranking Schemas
+# ---------------------------------------------------------------------------
+class StudentRankItem(BaseModel):
+    rank: int
+    student_id: int
+    student_name: str
+    admission_no: str
+    class_level: str
+    total_score: int
+    subjects_count: int
+    average_score: float
+    grade: str
+
+
+class ClassRankingResponse(BaseModel):
+    term: str
+    class_level: Optional[str] = None
+    total_students: int
+    rankings: list[StudentRankItem]
+

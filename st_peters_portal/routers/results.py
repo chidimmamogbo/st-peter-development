@@ -6,7 +6,7 @@ from sqlmodel import Session, select, func
 
 from st_peters_portal.background import notify_students_on_publication
 from st_peters_portal.database import get_session
-from st_peters_portal.dependencies import require_role
+from st_peters_portal.dependencies import get_current_user, require_role
 from st_peters_portal.models import (
     NotificationLog,
     ResultPublication,
@@ -17,9 +17,11 @@ from st_peters_portal.models import (
     User,
 )
 from st_peters_portal.schemas import (
+    ClassRankingResponse,
     NotificationRead,
     PublicationRead,
     StudentBelowThreshold,
+    StudentRankItem,
     compute_grade,
 )
 
@@ -155,3 +157,97 @@ def list_notifications(
         )
         for log in logs
     ]
+
+
+@router.get(
+    "/rankings",
+    response_model=ClassRankingResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get student class rankings for a term (Bonus endpoint)",
+)
+def get_class_rankings(
+    term: Annotated[str, Query(description="The academic term, e.g. '2026-Term1'")],
+    session: Annotated[Session, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    class_level: Annotated[Optional[str], Query(description="Optional filter by class level, e.g. 'SS2'")] = None,
+) -> ClassRankingResponse:
+    """
+    Bonus Endpoint: Calculate student class rankings based on average score for a term.
+    - If caller is a student, verifies that the term results have been officially published (403 if not).
+    - Ranks students by average score descending (breaking ties with total score).
+    """
+    term = term.strip().lower()
+
+    # Pre-publication check for students
+    if current_user.role == Role.STUDENT:
+        pub = session.exec(
+            select(ResultPublication).where(func.lower(ResultPublication.term) == term)
+        ).first()
+        if not pub or not pub.published_at:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Class rankings for term '{term}' have not been officially published yet.",
+            )
+
+    scores = session.exec(
+        select(Score).where(func.lower(Score.term) == term)
+    ).all()
+
+    # Group scores by student_id
+    student_scores: dict[int, list[int]] = {}
+    for s in scores:
+        student_scores.setdefault(s.student_id, []).append(s.score)
+
+    ranking_items = []
+    for s_id, sc_list in student_scores.items():
+        student = session.get(Student, s_id)
+        if not student:
+            continue
+        if class_level and student.class_level.upper() != class_level.strip().upper():
+            continue
+
+        user = session.get(User, student.user_id)
+        student_name = user.full_name if user else "Unknown"
+
+        total = sum(sc_list)
+        count = len(sc_list)
+        avg = round(total / count, 2) if count else 0.0
+
+        ranking_items.append({
+            "student_id": s_id,
+            "student_name": student_name,
+            "admission_no": student.admission_no,
+            "class_level": student.class_level,
+            "total_score": total,
+            "subjects_count": count,
+            "average_score": avg,
+            "grade": compute_grade(round(avg)),
+        })
+
+    # Sort descending by average_score, then total_score
+    ranking_items.sort(key=lambda x: (x["average_score"], x["total_score"]), reverse=True)
+
+    # Assign rank (1, 2, 3...)
+    ranked_list = []
+    for idx, item in enumerate(ranking_items, start=1):
+        ranked_list.append(
+            StudentRankItem(
+                rank=idx,
+                student_id=item["student_id"],
+                student_name=item["student_name"],
+                admission_no=item["admission_no"],
+                class_level=item["class_level"],
+                total_score=item["total_score"],
+                subjects_count=item["subjects_count"],
+                average_score=item["average_score"],
+                grade=item["grade"],
+            )
+        )
+
+    return ClassRankingResponse(
+        term=term,
+        class_level=class_level,
+        total_students=len(ranked_list),
+        rankings=ranked_list,
+    )
+
