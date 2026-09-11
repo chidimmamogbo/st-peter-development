@@ -200,6 +200,107 @@ In academic administration, users often type terms in various casings:
   - **Status**: `409 Conflict`
   - **Detail**: `"Username 'teacher_chem' is already registered."`
 
+### Step 2.3b: Register a New Student User Account
+* **Endpoint**: `POST /auth/register`
+* **Action**:
+  1. Expand `POST /auth/register`.
+  2. Click **Try it out**.
+  3. Request Body (register a new student account):
+     ```json
+     {
+       "username": "ifeanyi1",
+       "password": "Secret123!",
+       "role": "student",
+       "full_name": "Ifeanyi Okonkwo"
+     }
+     ```
+  4. Click **Execute**.
+* **Expected Status**: `201 Created`
+* **Response Body**:
+  ```json
+  {
+    "id": 8,
+    "username": "ifeanyi1",
+    "role": "student",
+    "full_name": "Ifeanyi Okonkwo",
+    "created_at": "..."
+  }
+  ```
+* **Talking Point**: *"All accounts—whether teachers, officers, or students—first register an authenticating identity through `POST /auth/register`. The returned user ID (e.g. `8`) is now ready to be linked to their academic student profile."*
+
+### Step 2.3c: Create Student Academic Profile with Username & User ID
+* **Endpoint**: `POST /students`
+* **Action**:
+  1. Expand `POST /students`.
+  2. Click **Try it out**.
+  3. Request Body (provide the `user_id`, matching `username`, unique `admission_no`, and `class_level`):
+     ```json
+     {
+       "user_id": 8,
+       "username": "ifeanyi1",
+       "admission_no": "STP/2026/010",
+       "class_level": "SS2"
+     }
+     ```
+  4. Click **Execute**.
+* **Expected Status**: `201 Created`
+* **Response Body**:
+  ```json
+  {
+    "id": 4,
+    "user_id": 8,
+    "username": "ifeanyi1",
+    "admission_no": "STP/2026/010",
+    "class_level": "SS2",
+    "full_name": "Ifeanyi Okonkwo"
+  }
+  ```
+* **Talking Point**: *"The academic profile links to the user account by `user_id` and also indexes `username` directly in the database student table for dual identification. Notice `full_name` is seamlessly resolved from the user table."*
+
+### Step 2.3d: Username Mismatch Protection (Negative Test — 400)
+* **Endpoint**: `POST /students`
+* **Action**:
+  1. Attempt to create a profile where `username` does not match the `user_id`:
+     ```json
+     {
+       "user_id": 8,
+       "username": "wrong_username",
+       "admission_no": "STP/2026/999",
+       "class_level": "SS2"
+     }
+     ```
+  2. Click **Execute**.
+* **Expected Status**: `400 Bad Request`
+* **Response Body**:
+  ```json
+  {
+    "detail": "Username mismatch: User ID 8 belongs to 'ifeanyi1', but you provided username 'wrong_username'."
+  }
+  ```
+* **Talking Point**: *"The API verifies integrity between user_id and username to prevent accidental profile misassignments."*
+
+### Step 2.3e: Role Validation Protection (Negative Test — 400)
+* **Endpoint**: `POST /students`
+* **Action**:
+  1. Attempt to create a student profile for `user_id`: `7` (which belongs to `teacher_chem`):
+     ```json
+     {
+       "user_id": 7,
+       "username": "teacher_chem",
+       "admission_no": "STP/2026/777",
+       "class_level": "SS2"
+     }
+     ```
+  2. Click **Execute**.
+* **Expected Status**: `400 Bad Request`
+* **Response Body**:
+  ```json
+  {
+    "detail": "Cannot create student profile: Target user 'teacher_chem' (ID 7) has role 'teacher', not 'student'. Please register a student user via POST /auth/register with role='student' first."
+  }
+  ```
+* **Talking Point**: *"Strict role boundary: only users explicitly registered with `role: 'student'` can be assigned an academic student profile."*
+
 ### Step 2.4: Create a New Subject
 * **Endpoint**: `POST /subjects`
 * **Action**:
@@ -796,29 +897,32 @@ In academic administration, users often type terms in various casings:
 | **3** | `POST /auth/token` | Unauthenticated | Incorrect password | **`401 Unauthorized`** | Argon2/Bcrypt hash verification |
 | **4** | `POST /auth/token` | All Roles | Correct credentials | **`200 OK`** | Issues signed JWT token |
 | **5** | `GET /auth/me` | Logged in User | Fetch profile | **`200 OK`** | Strips `hashed_password` completely |
-| **6** | `POST /auth/register` | Exams Officer | Register new teacher/student | **`201 Created`** | Only `exams_officer` can create users |
+| **6** | `POST /auth/register` | Exams Officer | Register new teacher/student user | **`201 Created`** | Only `exams_officer` can create users |
 | **7** | `POST /auth/register` | Exams Officer | Duplicate username | **`409 Conflict`** | Unique username enforcement |
 | **8** | `POST /auth/register` | Student / Teacher | Non-officer registration | **`403 Forbidden`** | Role-Based Access Control |
-| **9** | `POST /subjects` | Exams Officer | Create new curriculum subject | **`201 Created`** | Administrative curriculum management |
-| **10** | `PATCH /subjects/{id}/teacher` | Exams Officer | Assign teacher to subject | **`200 OK`** | Enforces teacher assignment link |
-| **11** | `POST /subjects/{id}/students/{id}` | Assigned Teacher / Officer | Enroll student in subject | **`201 Created`** | Enforces subject enrollment link |
-| **12** | `POST /subjects/{id}/students/{id}` | Unassigned Teacher | Attempting enrollment in another subject | **`403 Forbidden`** | Departmental isolation |
-| **13** | `POST /scores` | Assigned Teacher | Valid score (0–100) | **`201 Created`** | Computes grade (A-F), normalizes term |
-| **14** | `POST /scores` | Assigned Teacher | Invalid score (> 100 or < 0) | **`422 Unprocessable`** | Pydantic doorway boundary validation |
-| **15** | `POST /scores` | Assigned Teacher | Duplicate score entry | **`409 Conflict`** | Unique `(student, subject, term)` record |
-| **16** | `POST /scores` | Unassigned Teacher | Enter score for another subject | **`403 Forbidden`** | Subject ownership check |
-| **17** | `PATCH /scores/{id}` | Assigned Teacher | Correct existing score mark | **`200 OK`** | Re-computes letter grade |
-| **18** | `GET /scores/subject/{id}/stats` | Assigned Teacher / Officer | Query subject statistics | **`200 OK`** | Calculates highest, lowest, average |
-| **19** | `GET /students/{id}/results` | Student | View before official publication | **`403 Forbidden`** | Academic result freeze enforcement |
-| **20** | `GET /students/{id}/results` | Student | Guessing another student's ID | **`403 Forbidden`** | Anti-ID guessing security check |
-| **21** | `POST /results/publish/{term}` | Exams Officer | Publish term results | **`200 OK`** | Triggers asynchronous background task |
-| **22** | `POST /results/publish/{term}` | Exams Officer | Re-publishing same term | **`409 Conflict`** | Publication immutability |
-| **23** | `GET /results/notifications` | Exams Officer | Inspect notification logs | **`200 OK`** | Verifies async background worker |
-| **24** | `GET /students/{id}/results` | Student | View published own results | **`200 OK`** | Displays subjects, grades & GPA average |
-| **25** | `GET /students/{id}/results` | Student | Query with `2026-Term1` vs `2026-term1` | **`200 OK`** | Case-insensitive term resolution |
-| **26** | `GET /results/below` | Exams Officer | Students below threshold (< 40) | **`200 OK`** | Institutional academic diagnostic report |
-| **27** | `GET /scores` | Teachers / Officer | Filter scores by `?term=` [BONUS] | **`200 OK`** | Bonus term query filter with teacher isolation |
-| **28** | `GET /results/rankings` | Officer / Teachers / Students | Class ranking by term [BONUS] | **`200 OK`** | Bonus class ranking with GPA and tie-breaking |
+| **9** | `POST /students` | Exams Officer | Create student profile with `user_id` & `username` | **`201 Created`** | Links profile to user and indexes username |
+| **10** | `POST /students` | Exams Officer | Mismatched username and `user_id` | **`400 Bad Request`** | Data integrity verification |
+| **11** | `POST /students` | Exams Officer | Assign student profile to non-student role | **`400 Bad Request`** | Enforces role='student' boundary |
+| **12** | `POST /subjects` | Exams Officer | Create new curriculum subject | **`201 Created`** | Administrative curriculum management |
+| **13** | `PATCH /subjects/{id}/teacher` | Exams Officer | Assign teacher to subject | **`200 OK`** | Enforces teacher assignment link |
+| **14** | `POST /subjects/{id}/students/{id}` | Assigned Teacher / Officer | Enroll student in subject | **`201 Created`** | Enforces subject enrollment link |
+| **15** | `POST /subjects/{id}/students/{id}` | Unassigned Teacher | Attempting enrollment in another subject | **`403 Forbidden`** | Departmental isolation |
+| **16** | `POST /scores` | Assigned Teacher | Valid score (0–100) | **`201 Created`** | Computes grade (A-F), normalizes term |
+| **17** | `POST /scores` | Assigned Teacher | Invalid score (> 100 or < 0) | **`422 Unprocessable`** | Pydantic doorway boundary validation |
+| **18** | `POST /scores` | Assigned Teacher | Duplicate score entry | **`409 Conflict`** | Unique `(student, subject, term)` record |
+| **19** | `POST /scores` | Unassigned Teacher | Enter score for another subject | **`403 Forbidden`** | Subject ownership check |
+| **20** | `PATCH /scores/{id}` | Assigned Teacher | Correct existing score mark | **`200 OK`** | Re-computes letter grade |
+| **21** | `GET /scores/subject/{id}/stats` | Assigned Teacher / Officer | Query subject statistics | **`200 OK`** | Calculates highest, lowest, average |
+| **22** | `GET /students/{id}/results` | Student | View before official publication | **`403 Forbidden`** | Academic result freeze enforcement |
+| **23** | `GET /students/{id}/results` | Student | Guessing another student's ID | **`403 Forbidden`** | Anti-ID guessing security check |
+| **24** | `POST /results/publish/{term}` | Exams Officer | Publish term results | **`200 OK`** | Triggers asynchronous background task |
+| **25** | `POST /results/publish/{term}` | Exams Officer | Re-publishing same term | **`409 Conflict`** | Publication immutability |
+| **26** | `GET /results/notifications` | Exams Officer | Inspect notification logs | **`200 OK`** | Verifies async background worker |
+| **27** | `GET /students/{id}/results` | Student | View published own results | **`200 OK`** | Displays subjects, grades & GPA average |
+| **28** | `GET /students/{id}/results` | Student | Query with `2026-Term1` vs `2026-term1` | **`200 OK`** | Case-insensitive term resolution |
+| **29** | `GET /results/below` | Exams Officer | Students below threshold (< 40) | **`200 OK`** | Institutional academic diagnostic report |
+| **30** | `GET /scores` | Teachers / Officer | Filter scores by `?term=` [BONUS] | **`200 OK`** | Bonus term query filter with teacher isolation |
+| **31** | `GET /results/rankings` | Officer / Teachers / Students | Class ranking by term [BONUS] | **`200 OK`** | Bonus class ranking with GPA and tie-breaking |
 
 ---
 

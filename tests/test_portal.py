@@ -172,6 +172,42 @@ def test_register_user_by_officer_success():
     assert dup_res.status_code == 409
 
 
+def test_register_student_and_create_profile_flow():
+    officer_token = get_token("test_officer")
+    # Step 1: Register student user via /auth/register
+    reg_res = client.post(
+        "/auth/register",
+        headers={"Authorization": f"Bearer {officer_token}"},
+        json={
+            "username": "ifeanyi1",
+            "password": "Secret123!",
+            "role": "student",
+            "full_name": "Ifeanyi Ibe",
+        },
+    )
+    assert reg_res.status_code == 201
+    user_id = reg_res.json()["id"]
+
+    # Step 2: Create student profile via POST /students with user_id and username
+    prof_res = client.post(
+        "/students",
+        headers={"Authorization": f"Bearer {officer_token}"},
+        json={
+            "user_id": user_id,
+            "username": "ifeanyi1",
+            "admission_no": "STP/2026/010",
+            "class_level": "SS2",
+        },
+    )
+    assert prof_res.status_code == 201
+    data = prof_res.json()
+    assert data["user_id"] == user_id
+    assert data["username"] == "ifeanyi1"
+    assert data["admission_no"] == "STP/2026/010"
+    assert data["class_level"] == "SS2"
+    assert data["full_name"] == "Ifeanyi Ibe"
+
+
 def test_role_enforcement_403_for_wrong_role():
     student_token = get_token("test_student1")
     # Student attempting exams officer endpoint

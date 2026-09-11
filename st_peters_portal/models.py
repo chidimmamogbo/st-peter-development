@@ -27,6 +27,7 @@ class User(SQLModel, table=True):
 class Student(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(unique=True, foreign_key="user.id")
+    username: str = Field(default="", index=True)
     admission_no: str = Field(unique=True, index=True)
     class_level: str
 

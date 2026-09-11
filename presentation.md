@@ -90,6 +90,7 @@ erDiagram
     STUDENT {
         int id PK
         int user_id FK, UK
+        string username "indexed (dual identification)"
         string admission_no UK
         string class_level
     }

@@ -13,6 +13,7 @@ from st_peters_portal.schemas import (
     SubjectResultItem,
     compute_grade,
 )
+from st_peters_portal.security import hash_password
 
 router = APIRouter(prefix="/students", tags=["Students"])
 
@@ -28,29 +29,50 @@ def create_student_profile(
     session: Annotated[Session, Depends(get_session)],
     _: Annotated[User, Depends(require_role(Role.EXAMS_OFFICER))],
 ) -> StudentRead:
-    """Create a student academic profile linked to a User account."""
+    """
+    Create a student academic profile linked to an existing User account (Exams Officer only).
+    - User account must be registered first via POST /auth/register with role='student'.
+    - Stores both user_id and username in the student table for dual identification.
+    """
+    # 1. Look up user by user_id
     user = session.get(User, student_in.user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User ID {student_in.user_id} not found.",
+            detail=f"User ID {student_in.user_id} not found. Please register the student user account via POST /auth/register first.",
         )
+
+    # 2. Check role is student
     if user.role != Role.STUDENT:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"User {user.username} does not have the 'student' role.",
+            detail=(
+                f"Cannot create student profile: Target user '{user.username}' (ID {student_in.user_id}) "
+                f"has role '{user.role.value}', not 'student'. "
+                "Please register a student user via POST /auth/register with role='student' first."
+            ),
         )
 
-    # Check for duplicate student profile
+    # 3. Check username matches the user account
+    if user.username.lower() != student_in.username.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Username mismatch: User ID {student_in.user_id} belongs to '{user.username}', "
+                f"but you provided username '{student_in.username}'."
+            ),
+        )
+
+    # 4. Check for duplicate student profile
     existing_profile = session.exec(select(Student).where(Student.user_id == student_in.user_id)).first()
     if existing_profile:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"User ID {student_in.user_id} already has a student profile.",
+            detail=f"User ID {student_in.user_id} ('{user.username}') already has a student profile.",
         )
 
-    # Check for duplicate admission number
-    existing_adm = session.exec(select(Student).where(Student.admission_no == student_in.admission_no)).first()
+    # 5. Check for duplicate admission number
+    existing_adm = session.exec(select(Student).where(Student.admission_no == student_in.admission_no.strip())).first()
     if existing_adm:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -58,9 +80,10 @@ def create_student_profile(
         )
 
     db_student = Student(
-        user_id=student_in.user_id,
-        admission_no=student_in.admission_no,
-        class_level=student_in.class_level,
+        user_id=user.id,  # type: ignore
+        username=user.username,
+        admission_no=student_in.admission_no.strip(),
+        class_level=student_in.class_level.strip(),
     )
     session.add(db_student)
     session.commit()
@@ -69,6 +92,7 @@ def create_student_profile(
     return StudentRead(
         id=db_student.id,  # type: ignore
         user_id=db_student.user_id,
+        username=db_student.username,
         admission_no=db_student.admission_no,
         class_level=db_student.class_level,
         full_name=user.full_name,
@@ -94,6 +118,7 @@ def list_students(
             StudentRead(
                 id=s.id,  # type: ignore
                 user_id=s.user_id,
+                username=s.username or (u.username if u else ""),
                 admission_no=s.admission_no,
                 class_level=s.class_level,
                 full_name=u.full_name if u else "Unknown",
@@ -124,6 +149,7 @@ def get_student(
     return StudentRead(
         id=student.id,  # type: ignore
         user_id=student.user_id,
+        username=student.username or (user.username if user else ""),
         admission_no=student.admission_no,
         class_level=student.class_level,
         full_name=user.full_name if user else "Unknown",

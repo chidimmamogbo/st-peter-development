@@ -11,8 +11,20 @@ engine = create_engine(
 
 
 def create_db_and_tables() -> None:
-    """Create all registered SQLModel tables in SQLite."""
+    """Create all registered SQLModel tables in SQLite and ensure migrations."""
     SQLModel.metadata.create_all(engine)
+    try:
+        with engine.connect() as conn:
+            cursor = conn.exec_driver_sql("PRAGMA table_info(student)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if columns and "username" not in columns:
+                conn.exec_driver_sql("ALTER TABLE student ADD COLUMN username VARCHAR DEFAULT ''")
+                conn.exec_driver_sql(
+                    "UPDATE student SET username = (SELECT username FROM user WHERE user.id = student.user_id)"
+                )
+                conn.commit()
+    except Exception:
+        pass
 
 
 def get_session():

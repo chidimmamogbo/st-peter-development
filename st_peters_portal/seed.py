@@ -73,16 +73,19 @@ def seed_database(custom_engine=None) -> None:
         # 4. Student Profiles
         student_ada = Student(
             user_id=user_ada.id,  # type: ignore
+            username=user_ada.username,
             admission_no="STP/2026/001",
             class_level="SS2",
         )
         student_obi = Student(
             user_id=user_obi.id,  # type: ignore
+            username=user_obi.username,
             admission_no="STP/2026/002",
             class_level="SS2",
         )
         student_chi = Student(
             user_id=user_chi.id,  # type: ignore
+            username=user_chi.username,
             admission_no="STP/2026/003",
             class_level="SS2",
         )

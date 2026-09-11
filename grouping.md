@@ -77,7 +77,7 @@
    - **Key Code Sections**:
      - `Role(str, Enum)`: Enums for `EXAMS_OFFICER`, `TEACHER`, `STUDENT`.
      - `User`: Primary identity table (`username`, `hashed_password`, `role`, `full_name`).
-     - `Student`: Academic profile table with foreign key `user_id`, unique `admission_no`, and `class_level`.
+     - `Student`: Academic profile table with foreign key `user_id`, indexed `username` (dual identification), unique `admission_no`, and `class_level`.
      - `Subject`: Curriculum entity with unique `code` and foreign key `teacher_id`.
      - `SubjectEnrollment`: Association table linking `subject_id` and `student_id`.
      - `Score`: Academic marks with foreign keys to student and subject, `term`, and `score` (0–100).
@@ -133,7 +133,7 @@
 2. `st_peters_portal/routers/students.py`
    - **What it does**: Student academic records and report cards.
    - **Key Code Sections**:
-     - `POST /students`: Creates an academic profile linking a student user to an admission number and class level. Exams Officer only.
+     - `POST /students`: Creates an academic profile linking a registered student user by `user_id` and `username` to an admission number and class level (with dual identification in DB and cross-validation against the user account). Exams Officer only.
      - `GET /students`: Lists all registered students across the institution. Exams Officer only.
      - `GET /students/{student_id}`: Retrieves profile details of a specific student.
      - `GET /students/{student_id}/results`: **The Flagship Student Endpoint**.

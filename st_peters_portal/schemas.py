@@ -58,15 +58,17 @@ class TokenRead(BaseModel):
 # Student Schemas
 # ---------------------------------------------------------------------------
 class StudentCreate(BaseModel):
-    user_id: int = Field(..., examples=[2])
-    admission_no: str = Field(..., examples=["STP/2026/001"])
-    class_level: str = Field(..., examples=["SS2"])
+    user_id: int = Field(..., description="The user ID of the student registered via /auth/register", examples=[11])
+    username: str = Field(..., description="The username of the registered student", examples=["ifeanyi1"])
+    admission_no: str = Field(..., description="Unique admission number", examples=["STP/2026/010"])
+    class_level: str = Field(..., description="Class level, e.g. SS2", examples=["SS2"])
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "user_id": 2,
-                "admission_no": "STP/2026/001",
+                "user_id": 11,
+                "username": "ifeanyi1",
+                "admission_no": "STP/2026/010",
                 "class_level": "SS2",
             }
         }
@@ -76,6 +78,7 @@ class StudentCreate(BaseModel):
 class StudentRead(BaseModel):
     id: int
     user_id: int
+    username: str
     admission_no: str
     class_level: str
     full_name: str
