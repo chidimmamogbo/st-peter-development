@@ -53,3 +53,11 @@ htmlcov/
 # Operating System
 .DS_Store
 Thumbs.db
+
+CODE_EXPLANATION.md
+EXCALIDRAW_FLOWCHART.md
+grouping.md
+presentation.md
+prsentation.md
+tests/
+Test.md
