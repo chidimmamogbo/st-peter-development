@@ -61,3 +61,28 @@ presentation.md
 prsentation.md
 tests/
 Test.md
+
+# Frontend (Next.js & Bun/Node)
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+out/
+**/out/
+dist/
+
+# Frontend Environment Variables & Secrets
+.env.local
+.env.*.local
+frontend/.env.local
+frontend/.env.*.local
+**/.env.local
+**/.env.*.local
+!.env.example
+!frontend/.env.example
+
+# NPM / Yarn / Bun Debug Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
