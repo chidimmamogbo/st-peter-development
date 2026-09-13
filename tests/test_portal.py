@@ -332,7 +332,12 @@ def test_publish_term_and_background_task():
         headers={"Authorization": f"Bearer {officer_token}"},
     )
     assert res.status_code == 200
-    assert res.json()["term"] == "2026-term1"
+    body = res.json()
+    assert body["term"] == "2026-term1"
+    assert "failing_students" in body
+    assert len(body["failing_students"]) >= 1
+    assert body["failing_students"][0]["student_id"] == 2
+    assert body["failing_students"][0]["score"] == 35
 
     # Re-publishing same term returns 409
     res_dup = client.post(
@@ -370,6 +375,39 @@ def test_student_viewing_published_results():
     assert len(data["results"]) >= 1
     assert data["results"][0]["grade"] == "A"
     assert data["average_score"] == 85.0
+    assert data["results"][0]["teacher_name"] == "Teacher One"
+    assert "teacher_id" not in data["results"][0]
+
+
+def test_student_me_results_auto_detects_identity():
+    student1_token = get_token("test_student1")
+    # Student 1 fetches own results via /me/results without supplying student_id
+    res = client.get(
+        "/students/me/results?term=2026-Term1",
+        headers={"Authorization": f"Bearer {student1_token}"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["student_id"] == 1
+    assert data["admission_no"] == "STP/T/001"
+    assert data["full_name"] == "Ada Test"
+    assert len(data["results"]) >= 1
+    assert data["results"][0]["teacher_name"] == "Teacher One"
+
+    # Pre-publication check on /me/results returns 403 for unpublished term
+    res_unpub = client.get(
+        "/students/me/results?term=2027-Term3",
+        headers={"Authorization": f"Bearer {student1_token}"},
+    )
+    assert res_unpub.status_code == 403
+
+    # Teacher or Exams Officer calling /me/results is forbidden (requires student role)
+    teacher1_token = get_token("test_teacher1")
+    res_teacher = client.get(
+        "/students/me/results?term=2026-Term1",
+        headers={"Authorization": f"Bearer {teacher1_token}"},
+    )
+    assert res_teacher.status_code == 403
 
 
 def test_failing_students_below_40_report():
@@ -384,6 +422,29 @@ def test_failing_students_below_40_report():
     assert failing[0]["student_id"] == 2
     assert failing[0]["score"] == 35
     assert failing[0]["grade"] == "F"
+
+
+def test_publish_surfaces_failing_students():
+    officer_token = get_token("test_officer")
+    teacher1_token = get_token("test_teacher1")
+    # Teacher 1 adds a failing score for student 1 in 2026-Term2
+    client.post(
+        "/scores",
+        headers={"Authorization": f"Bearer {teacher1_token}"},
+        json={"student_id": 1, "subject_id": 1, "term": "2026-Term2", "score": 28},
+    )
+    # Publish 2026-Term2
+    res = client.post(
+        "/results/publish/2026-Term2",
+        headers={"Authorization": f"Bearer {officer_token}"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["term"] == "2026-term2"
+    assert "failing_students" in data
+    failing = data["failing_students"]
+    assert len(failing) >= 1
+    assert any(f["student_id"] == 1 and f["score"] == 28 and f["grade"] == "F" for f in failing)
 
 
 # ---------------------------------------------------------------------------
@@ -433,4 +494,92 @@ def test_bonus_class_ranking_endpoint():
     )
     assert res_student.status_code == 200
     assert res_student.json()["total_students"] == data["total_students"]
+
+
+def test_list_students_filter_by_subject_and_class_level():
+    officer_token = get_token("test_officer")
+    # 1. Unfiltered returns all students
+    res_all = client.get(
+        "/students",
+        headers={"Authorization": f"Bearer {officer_token}"},
+    )
+    assert res_all.status_code == 200
+    all_students = res_all.json()
+    assert len(all_students) >= 2
+
+    # 2. Case-insensitive class_level filter
+    res_ss2 = client.get(
+        "/students?class_level=ss2",
+        headers={"Authorization": f"Bearer {officer_token}"},
+    )
+    assert res_ss2.status_code == 200
+    for s in res_ss2.json():
+        assert s["class_level"].upper() == "SS2"
+
+    # 3. Class level with no matches
+    res_empty_class = client.get(
+        "/students?class_level=SS3",
+        headers={"Authorization": f"Bearer {officer_token}"},
+    )
+    assert res_empty_class.status_code == 200
+    assert res_empty_class.json() == []
+
+    # 4. Filter by subject_id (Subject 1 has only Student 1 enrolled)
+    res_sub1 = client.get(
+        "/students?subject_id=1",
+        headers={"Authorization": f"Bearer {officer_token}"},
+    )
+    assert res_sub1.status_code == 200
+    sub1_students = res_sub1.json()
+    assert len(sub1_students) == 1
+    assert sub1_students[0]["id"] == 1
+
+    # 5. Filter by subject_id (Subject 2 has Student 1 and Student 2 enrolled)
+    res_sub2 = client.get(
+        "/students?subject_id=2",
+        headers={"Authorization": f"Bearer {officer_token}"},
+    )
+    assert res_sub2.status_code == 200
+    sub2_student_ids = {s["id"] for s in res_sub2.json()}
+    assert 1 in sub2_student_ids and 2 in sub2_student_ids
+
+    # 6. Non-existent subject_id returns empty list (forgiving filter style)
+    res_sub_missing = client.get(
+        "/students?subject_id=9999",
+        headers={"Authorization": f"Bearer {officer_token}"},
+    )
+    assert res_sub_missing.status_code == 200
+    assert res_sub_missing.json() == []
+
+    # 7. Combined filter (subject_id and class_level)
+    res_comb = client.get(
+        "/students?subject_id=1&class_level=SS2",
+        headers={"Authorization": f"Bearer {officer_token}"},
+    )
+    assert res_comb.status_code == 200
+    assert len(res_comb.json()) == 1
+    assert res_comb.json()[0]["id"] == 1
+
+
+def test_cors_configuration():
+    # 1. Allowed origin receives explicit CORS header and credentials support
+    res_allowed = client.options(
+        "/",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert res_allowed.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    assert res_allowed.headers.get("access-control-allow-credentials") == "true"
+
+    # 2. Disallowed origin does not receive access-control-allow-origin
+    res_disallowed = client.options(
+        "/",
+        headers={
+            "Origin": "http://unauthorized-domain.com",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert res_disallowed.headers.get("access-control-allow-origin") is None
 

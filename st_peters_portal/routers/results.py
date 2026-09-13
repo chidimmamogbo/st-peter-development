@@ -28,6 +28,42 @@ from st_peters_portal.schemas import (
 router = APIRouter(prefix="/results", tags=["Results"])
 
 
+def _find_students_below_threshold(
+    session: Session,
+    term: str,
+    threshold: int = 40,
+    subject_id: Optional[int] = None,
+) -> list[StudentBelowThreshold]:
+    """Internal helper to locate students scoring below a given threshold for a term."""
+    term = term.strip().lower()
+    query = select(Score).where(func.lower(Score.term) == term, Score.score < threshold)
+    if subject_id is not None:
+        query = query.where(Score.subject_id == subject_id)
+
+    failing_scores = session.exec(query).all()
+    results: list[StudentBelowThreshold] = []
+
+    for sc in failing_scores:
+        student = session.get(Student, sc.student_id)
+        subject = session.get(Subject, sc.subject_id)
+        user = session.get(User, student.user_id) if student else None
+
+        results.append(
+            StudentBelowThreshold(
+                student_id=sc.student_id,
+                student_name=user.full_name if user else "Unknown",
+                admission_no=student.admission_no if student else "Unknown",
+                subject_id=sc.subject_id,
+                subject_name=subject.name if subject else "Unknown",
+                term=sc.term,
+                score=sc.score,
+                grade=compute_grade(sc.score),
+            )
+        )
+
+    return results
+
+
 @router.post(
     "/publish/{term}",
     response_model=PublicationRead,
@@ -44,6 +80,7 @@ def publish_term_results(
     Publish a term's results.
     - If term is already published, returns 409 Conflict.
     - Immediately returns HTTP 200 to the exams officer.
+    - Automatically surfaces failing students scoring below 40 in the response.
     - Dispatches a background task to write notification records per student.
     """
     term = term.strip().lower()
@@ -73,6 +110,14 @@ def publish_term_results(
     session.commit()
     session.refresh(publication)
 
+    # Automatically identify students below threshold (40) upon publication
+    failing_students = _find_students_below_threshold(
+        session=session,
+        term=term,
+        threshold=40,
+        subject_id=None,
+    )
+
     # Queue background task to write notifications without delaying response
     background_tasks.add_task(notify_students_on_publication, term)
 
@@ -81,6 +126,7 @@ def publish_term_results(
         term=publication.term,
         published_at=publication.published_at,
         published_by=publication.published_by,
+        failing_students=failing_students,
     )
 
 
@@ -98,33 +144,12 @@ def get_students_below_threshold(
     threshold: Annotated[int, Query(description="Score threshold (default 40)", ge=0, le=100)] = 40,
 ) -> list[StudentBelowThreshold]:
     """Identify students failing any subject (score below threshold, default 40)."""
-    term = term.strip().lower()
-    query = select(Score).where(func.lower(Score.term) == term, Score.score < threshold)
-    if subject_id is not None:
-        query = query.where(Score.subject_id == subject_id)
-
-    failing_scores = session.exec(query).all()
-    results: list[StudentBelowThreshold] = []
-
-    for sc in failing_scores:
-        student = session.get(Student, sc.student_id)
-        subject = session.get(Subject, sc.subject_id)
-        user = session.get(User, student.user_id) if student else None
-
-        results.append(
-            StudentBelowThreshold(
-                student_id=sc.student_id,
-                student_name=user.full_name if user else "Unknown",
-                admission_no=student.admission_no if student else "Unknown",
-                subject_id=sc.subject_id,
-                subject_name=subject.name if subject else "Unknown",
-                term=sc.term,
-                score=sc.score,
-                grade=compute_grade(sc.score),
-            )
-        )
-
-    return results
+    return _find_students_below_threshold(
+        session=session,
+        term=term,
+        threshold=threshold,
+        subject_id=subject_id,
+    )
 
 
 @router.get(

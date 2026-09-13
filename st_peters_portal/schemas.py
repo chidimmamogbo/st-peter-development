@@ -188,6 +188,7 @@ class SubjectResultItem(BaseModel):
     subject_code: str
     score: int
     grade: str
+    teacher_name: Optional[str] = None
 
 
 class StudentTermSummary(BaseModel):
@@ -226,6 +227,7 @@ class PublicationRead(BaseModel):
     term: str
     published_at: Optional[datetime]
     published_by: Optional[int]
+    failing_students: list[StudentBelowThreshold] = []
 
 
 class NotificationRead(BaseModel):

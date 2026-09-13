@@ -1,4 +1,5 @@
 """Main application entrypoint: sets up FastAPI, middleware, and router inclusion."""
+import os
 import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
@@ -52,10 +53,16 @@ app = FastAPI(
 # 1. Custom Timing Middleware
 app.add_middleware(ProcessTimeMiddleware)
 
-# 2. CORS Middleware
+# 2. CORS Middleware (W3C-compliant: explicit origins when credentials are supported)
+cors_origins_raw = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000",
+)
+allowed_origins = [origin.strip() for origin in cors_origins_raw.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -4,8 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select, func
 
 from st_peters_portal.database import get_session
-from st_peters_portal.dependencies import get_current_user, require_role
-from st_peters_portal.models import ResultPublication, Role, Score, Student, Subject, User
+from st_peters_portal.dependencies import get_current_student, get_current_user, require_role
+from st_peters_portal.models import (
+    ResultPublication,
+    Role,
+    Score,
+    Student,
+    Subject,
+    SubjectEnrollment,
+    User,
+)
 from st_peters_portal.schemas import (
     StudentCreate,
     StudentRead,
@@ -108,9 +116,29 @@ def create_student_profile(
 def list_students(
     session: Annotated[Session, Depends(get_session)],
     _: Annotated[User, Depends(require_role(Role.EXAMS_OFFICER))],
+    subject_id: Annotated[Optional[int], Query(description="Filter to students enrolled in this subject")] = None,
+    class_level: Annotated[Optional[str], Query(description="Filter by class level, e.g. 'SS2'")] = None,
 ) -> list[StudentRead]:
-    """Retrieve all student profiles across the institution."""
-    students = session.exec(select(Student)).all()
+    """Retrieve all student profiles across the institution, with optional filtering by subject or class level."""
+    query = select(Student)
+
+    if subject_id is not None:
+        subj = session.get(Subject, subject_id)
+        if not subj:
+            return []
+        enrolled_student_ids = session.exec(
+            select(SubjectEnrollment.student_id).where(SubjectEnrollment.subject_id == subject_id)
+        ).all()
+        if not enrolled_student_ids:
+            return []
+        query = query.where(Student.id.in_(enrolled_student_ids))
+
+    students = session.exec(query).all()
+
+    if class_level:
+        target_class = class_level.strip().upper()
+        students = [s for s in students if s.class_level and s.class_level.upper() == target_class]
+
     results: list[StudentRead] = []
     for s in students:
         u = session.get(User, s.user_id)
@@ -153,6 +181,84 @@ def get_student(
         admission_no=student.admission_no,
         class_level=student.class_level,
         full_name=user.full_name if user else "Unknown",
+    )
+
+
+def _build_student_term_summary(
+    session: Session,
+    target_student: Student,
+    term: str,
+    check_publication: bool = True,
+) -> StudentTermSummary:
+    """Internal helper to assemble a student's term report card, computing grades, averages, and teacher names."""
+    term = term.strip().lower()
+
+    if check_publication:
+        pub = session.exec(select(ResultPublication).where(func.lower(ResultPublication.term) == term)).first()
+        if not pub or not pub.published_at:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Results for term '{term}' have not been officially published yet.",
+            )
+
+    # Fetch scores
+    scores = session.exec(
+        select(Score).where(Score.student_id == target_student.id, func.lower(Score.term) == term)
+    ).all()
+
+    target_user = session.get(User, target_student.user_id)
+    items: list[SubjectResultItem] = []
+    total_score = 0
+
+    for score in scores:
+        subj = session.get(Subject, score.subject_id)
+        teacher = session.get(User, subj.teacher_id) if subj and subj.teacher_id else None
+        items.append(
+            SubjectResultItem(
+                subject_id=score.subject_id,
+                subject_name=subj.name if subj else "Unknown",
+                subject_code=subj.code if subj else "Unknown",
+                score=score.score,
+                grade=compute_grade(score.score),
+                teacher_name=teacher.full_name if teacher else None,
+            )
+        )
+        total_score += score.score
+
+    avg = round(total_score / len(items), 2) if items else 0.0
+
+    return StudentTermSummary(
+        student_id=target_student.id,  # type: ignore
+        admission_no=target_student.admission_no,
+        class_level=target_student.class_level,
+        full_name=target_user.full_name if target_user else "Unknown",
+        term=term,
+        results=items,
+        average_score=avg,
+    )
+
+
+@router.get(
+    "/me/results",
+    response_model=StudentTermSummary,
+    status_code=status.HTTP_200_OK,
+    summary="Get caller's own term results (Student only, auto-detected from JWT)",
+)
+def get_my_results(
+    term: Annotated[str, Query(description="The academic term, e.g. '2026-Term1'")],
+    session: Annotated[Session, Depends(get_session)],
+    current_student: Annotated[Student, Depends(get_current_student)],
+) -> StudentTermSummary:
+    """
+    Retrieve term results for the currently authenticated student.
+    - Identity is automatically derived from the caller's JWT token (no student_id needed).
+    - Checks that results for this term have been officially published (403 if not).
+    """
+    return _build_student_term_summary(
+        session=session,
+        target_student=current_student,
+        term=term,
+        check_publication=True,
     )
 
 
@@ -200,50 +306,15 @@ def get_student_results(
                 detail="Access forbidden: you are not authorized to view results for another student.",
             )
 
-        # Ensure term is published
-        pub = session.exec(select(ResultPublication).where(func.lower(ResultPublication.term) == term)).first()
-        if not pub or not pub.published_at:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Results for term '{term}' have not been officially published yet.",
-            )
-
     elif current_user.role == Role.TEACHER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Teachers cannot view complete student result summaries across all subjects. Check your subject stats instead.",
         )
 
-    # Fetch scores
-    scores = session.exec(
-        select(Score).where(Score.student_id == student_id, func.lower(Score.term) == term)
-    ).all()
-
-    target_user = session.get(User, target_student.user_id)
-    items: list[SubjectResultItem] = []
-    total_score = 0
-
-    for score in scores:
-        subj = session.get(Subject, score.subject_id)
-        items.append(
-            SubjectResultItem(
-                subject_id=score.subject_id,
-                subject_name=subj.name if subj else "Unknown",
-                subject_code=subj.code if subj else "Unknown",
-                score=score.score,
-                grade=compute_grade(score.score),
-            )
-        )
-        total_score += score.score
-
-    avg = round(total_score / len(items), 2) if items else 0.0
-
-    return StudentTermSummary(
-        student_id=target_student.id,  # type: ignore
-        admission_no=target_student.admission_no,
-        class_level=target_student.class_level,
-        full_name=target_user.full_name if target_user else "Unknown",
+    return _build_student_term_summary(
+        session=session,
+        target_student=target_student,
         term=term,
-        results=items,
-        average_score=avg,
+        check_publication=(current_user.role == Role.STUDENT),
     )
