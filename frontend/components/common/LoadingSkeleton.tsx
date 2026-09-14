@@ -65,6 +65,8 @@ export const StatGridSkeleton: React.FC<{ count?: number }> = ({ count = 4 }) =>
   );
 };
 
+export const StatCardSkeleton = StatGridSkeleton;
+
 export const DetailSkeleton: React.FC = () => {
   return (
     <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm animate-pulse space-y-6">

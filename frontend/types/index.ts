@@ -131,3 +131,32 @@ export interface ClassRankingResponse {
   total_students: number;
   rankings: StudentRankItem[];
 }
+
+export interface ClassLevelInfo {
+  class_level: string;
+  teacher_id: number | null;
+  teacher_name: string | null;
+  student_count?: number;
+}
+
+export interface StaffUser extends User {
+  subjects_taught?: string[];
+}
+
+export interface TeacherStudentItem {
+  student_id: number;
+  user_id: number;
+  full_name: string;
+  admission_no: string;
+  class_level: string;
+  enrolled_subjects: {
+    subject_id: number;
+    subject_name: string;
+    subject_code: string;
+  }[];
+}
+
+export interface PublishedTermItem {
+  term: string;
+  published_at: string;
+}

@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { AppLayout } from "@/components/common/AppLayout";
 import { ProtectedRoute } from "@/components/common/ProtectedRoute";
 import { TableSkeleton } from "@/components/common/LoadingSkeleton";
 import { AlertBanner } from "@/components/common/AlertBanner";
-import { studentsApi, parseApiError, ApiError } from "@/lib/api";
-import { StudentTermSummary } from "@/types";
+import { studentsApi, resultsApi, parseApiError, ApiError } from "@/lib/api";
+import { StudentTermSummary, PublishedTermItem } from "@/types";
 import {
   FileText,
   Printer,
@@ -14,14 +14,34 @@ import {
   Info,
   Clock,
   CheckCircle2,
+  GraduationCap,
 } from "lucide-react";
 
 export default function StudentResultsPage() {
-  const [term, setTerm] = useState("2026-term1");
+  const [publishedTerms, setPublishedTerms] = useState<PublishedTermItem[]>([]);
+  const [term, setTerm] = useState("2026-Term1");
   const [resultsData, setResultsData] = useState<StudentTermSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [unpublishedMessage, setUnpublishedMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Load published terms dropdown list on mount
+  useEffect(() => {
+    async function loadTerms() {
+      try {
+        const terms = await resultsApi.getPublishedTerms();
+        if (terms && terms.length > 0) {
+          setPublishedTerms(terms);
+          setTerm(terms[0].term);
+        } else {
+          setPublishedTerms([{ term: "2026-Term1", published_at: new Date().toISOString() }]);
+        }
+      } catch {
+        setPublishedTerms([{ term: "2026-Term1", published_at: new Date().toISOString() }]);
+      }
+    }
+    loadTerms();
+  }, []);
 
   const fetchResults = async (termToQuery: string) => {
     setIsLoading(true);
@@ -48,8 +68,10 @@ export default function StudentResultsPage() {
   };
 
   useEffect(() => {
-    fetchResults(term);
-  }, []);
+    if (term) {
+      fetchResults(term);
+    }
+  }, [term]);
 
   const handlePrint = () => {
     if (typeof window !== "undefined") {
@@ -57,244 +79,226 @@ export default function StudentResultsPage() {
     }
   };
 
-  const getOverallGrade = (avg: number) => {
-    if (avg >= 70) return { grade: "A", text: "Excellent (Distinction)", color: "text-emerald-700 bg-emerald-50 border-emerald-200" };
-    if (avg >= 60) return { grade: "B", text: "Very Good", color: "text-sky-700 bg-sky-50 border-sky-200" };
-    if (avg >= 50) return { grade: "C", text: "Good (Credit)", color: "text-amber-700 bg-amber-50 border-amber-200" };
-    if (avg >= 40) return { grade: "D", text: "Pass", color: "text-orange-700 bg-orange-50 border-orange-200" };
-    return { grade: "F", text: "Needs Improvement (Fail)", color: "text-rose-700 bg-rose-50 border-rose-200" };
-  };
-
   return (
     <ProtectedRoute allowedRoles={["student"]}>
-      <AppLayout title="My Result Sheet — St. Peter's Portal">
-        <div className="space-y-6">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
+      <AppLayout title="My Official Result Sheet | St. Peter's Result Portal">
+        <div className="space-y-6 animate-fadeIn">
+          {/* Print-Only School Crest & Header */}
+          <div className="hidden print:block pb-6 mb-6 border-b-2 border-slate-900 text-center">
+            <h1 className="text-2xl font-black uppercase tracking-wide text-slate-900">
+              St. Peter&apos;s College
+            </h1>
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-600 mt-0.5">
+              Continuous Assessment &amp; Terminal Examination Report Card
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Academic Session 2025/2026 • Verified Institutional Transcript
+            </p>
+          </div>
+
+          {/* Screen Header & Term Selector (Hidden on Print) */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 no-print">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-navy-900 tracking-tight flex items-center gap-3">
-                <FileText className="w-8 h-8 text-brand-600" />
-                <span>My Academic Report Card</span>
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+                <FileText className="w-6 h-6 text-brand-600" />
+                <span>My Academic Results</span>
               </h1>
               <p className="text-sm text-slate-500 mt-1">
-                Official continuous assessment and examination grades signed off by St. Peter&apos;s College.
+                Your authenticated terminal grades, continuous assessments, and instructor remarks.
               </p>
             </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto">
+
+            {/* Term Dropdown Selector & Print Button */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+                <Calendar className="w-4 h-4 text-slate-400" />
+                <select
+                  value={term}
+                  onChange={(e) => setTerm(e.target.value)}
+                  className="text-xs sm:text-sm font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                >
+                  {publishedTerms.map((t) => (
+                    <option key={t.term} value={t.term}>
+                      {t.term}
+                    </option>
+                  ))}
+                  {/* Option to test unpublished term */}
+                  <option value="2026-Term2">2026-Term2 (Unpublished Demo)</option>
+                  <option value="2026-Term3">2026-Term3 (Unpublished Demo)</option>
+                </select>
+              </div>
+
               <button
                 onClick={handlePrint}
                 disabled={!resultsData}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm transition disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs shadow-xs transition disabled:opacity-40"
               >
-                <Printer className="w-4 h-4 text-slate-500" />
-                <span>Print Official Sheet</span>
+                <Printer className="w-4 h-4" />
+                <span>Print Result</span>
               </button>
             </div>
           </div>
 
-          {/* Term Selector (No Print) */}
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 items-end no-print">
-            <div className="w-full sm:w-72">
-              <label className="block text-xs font-semibold uppercase text-slate-600 mb-1.5 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-brand-600" />
-                <span>Academic Term</span>
-              </label>
-              <input
-                type="text"
-                value={term}
-                onChange={(e) => setTerm(e.target.value)}
-                placeholder="2026-term1"
-                className="w-full text-sm rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900 font-mono focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-            <button
-              onClick={() => fetchResults(term)}
-              disabled={isLoading || !term.trim()}
-              className="w-full sm:w-auto px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg shadow-sm transition disabled:opacity-50"
-            >
-              Load Term Sheet
-            </button>
-          </div>
-
-          {/* Calm, Friendly Banner for 403 Unpublished Term (Strict Requirement) */}
+          {/* Calm, Friendly Banner on 403 Unpublished Term (Mandatory Requirement) */}
           {unpublishedMessage && (
-            <div className="bg-sky-50/80 border border-sky-200 rounded-2xl p-6 sm:p-7 shadow-sm animate-fadeIn">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center flex-shrink-0">
-                  <Clock className="w-5 h-5" />
-                </div>
-                <div className="space-y-1.5">
-                  <h3 className="text-base font-bold text-sky-950">
-                    Results Pending Official Publication
-                  </h3>
-                  <p className="text-sm text-sky-800 leading-relaxed max-w-2xl">
-                    {unpublishedMessage}
-                  </p>
-                  <p className="text-xs text-sky-700 pt-1">
-                    Grade moderation is currently in progress. As soon as the Exams Office ratifies and officially publishes this term, your detailed subject grades will appear here automatically.
-                  </p>
-                </div>
+            <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-5 text-amber-900 flex items-start gap-3.5 shadow-xs">
+              <Clock className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <h3 className="font-semibold text-sm text-amber-900">Term Results Pending Publication</h3>
+                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                  {unpublishedMessage}
+                </p>
+                <p className="text-[11px] text-amber-700/80 mt-2">
+                  Teachers are currently finalizing continuous assessment marks. Please check back once the Exams Office officially publishes results for this term.
+                </p>
               </div>
             </div>
           )}
 
-          {error && <AlertBanner type="error" message={error} onClose={() => setError(null)} />}
+          {error && <AlertBanner type="error" message={error} />}
 
-          {/* Loading Skeleton */}
-          {isLoading && <TableSkeleton rows={4} columns={5} />}
-
-          {/* Published Results View */}
-          {resultsData && !isLoading && (
+          {/* Result Content */}
+          {isLoading ? (
+            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs">
+              <TableSkeleton rows={5} />
+            </div>
+          ) : resultsData ? (
             <div className="space-y-6">
-              {/* Official School Header for Print & Display */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8">
-                <div className="border-b border-slate-200 pb-6 mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                  <div>
-                    <span className="text-xs font-bold uppercase tracking-widest text-brand-600 block">
-                      St. Peter&apos;s College, Junior &amp; Senior Academy
-                    </span>
-                    <h2 className="text-2xl font-extrabold text-navy-900 tracking-tight mt-0.5">
-                      Student Academic Transcript
-                    </h2>
-                    <p className="text-xs text-slate-500 font-medium">
-                      Official Termly Assessment Record
-                    </p>
+              {/* Student Metadata Card (Shown on screen and formatted on print) */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-6 print:border-none print:p-0">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-brand-50 text-brand-700 flex items-center justify-center font-bold text-lg border border-brand-100 no-print">
+                    <GraduationCap className="w-7 h-7" />
                   </div>
-                  <div className="text-left sm:text-right">
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Ratified &amp; Published</span>
+                  <div>
+                    <span className="text-xs font-semibold text-brand-600 uppercase tracking-wider block">
+                      Student Transcript
                     </span>
-                    <div className="text-xs font-mono text-slate-400 mt-1">
-                      Term: {resultsData.term}
+                    <h2 className="text-xl font-bold text-slate-900">{resultsData.full_name}</h2>
+                    <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-slate-500">
+                      <span>Admission No: <strong className="font-mono text-slate-800">{resultsData.admission_no}</strong></span>
+                      <span>•</span>
+                      <span>Class: <strong className="text-slate-800">{resultsData.class_level}</strong></span>
+                      <span>•</span>
+                      <span>Term: <strong className="text-slate-800">{resultsData.term.toUpperCase()}</strong></span>
                     </div>
                   </div>
                 </div>
 
-                {/* Student Info Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <div>
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                      Full Name
-                    </span>
-                    <span className="font-bold text-navy-900 text-base">{resultsData.full_name}</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                      Admission No
-                    </span>
-                    <span className="font-mono font-bold text-brand-700 text-sm">
-                      {resultsData.admission_no}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                      Class Level
-                    </span>
-                    <span className="font-semibold text-slate-800">{resultsData.class_level}</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                      Academic Term
-                    </span>
-                    <span className="font-semibold text-slate-800 font-mono">{resultsData.term}</span>
-                  </div>
+                {/* Average / GPA Score Badge */}
+                <div className="p-4 rounded-xl bg-brand-50/70 border border-brand-100 text-center sm:text-right shrink-0">
+                  <span className="text-xs text-brand-700 font-semibold block uppercase tracking-wider">
+                    Cumulative Average
+                  </span>
+                  <span className="text-3xl font-extrabold text-brand-800 block mt-0.5">
+                    {resultsData.average_score}%
+                  </span>
+                  <span className="text-[11px] text-brand-600 font-medium">
+                    {resultsData.results.length} Subjects Evaluated
+                  </span>
+                </div>
+              </div>
+
+              {/* Subject Results Table with Teacher Names (Mandatory Requirement) */}
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden print:border print:border-slate-300">
+                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                  <h3 className="font-bold text-slate-900 text-sm">Subject Breakdown &amp; Teacher Assessments</h3>
+                  <span className="text-xs text-slate-400 font-mono">Passing Grade: 40%</span>
                 </div>
 
-                {/* Overall Average / GPA Card */}
-                {(() => {
-                  const gradeInfo = getOverallGrade(resultsData.average_score);
-                  return (
-                    <div className="mt-6 p-5 rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white flex flex-col sm:flex-row items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-brand-600 text-white flex items-center justify-center">
-                          <Award className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold uppercase text-slate-400">Cumulative GPA Average</div>
-                          <div className="text-2xl sm:text-3xl font-black text-navy-900">
-                            {resultsData.average_score}%
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-center sm:text-right">
-                        <span className={`inline-block text-xs font-bold px-3 py-1 rounded-full border ${gradeInfo.color}`}>
-                          Grade: {gradeInfo.grade} — {gradeInfo.text}
-                        </span>
-                        <div className="text-[11px] text-slate-500 mt-1">
-                          Calculated across {resultsData.results.length} subjects
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Results Table */}
-                <div className="mt-8 border border-slate-200 rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-sm text-slate-700">
-                    <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200">
-                      <tr>
-                        <th className="px-6 py-3.5">Subject Code</th>
-                        <th className="px-6 py-3.5">Subject Title</th>
-                        <th className="px-6 py-3.5">Subject Teacher</th>
-                        <th className="px-6 py-3.5 text-center">Score</th>
-                        <th className="px-6 py-3.5 text-center">Grade</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {resultsData.results.length === 0 ? (
+                {resultsData.results.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-sm">
+                    No scores recorded for this student in {resultsData.term}.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50/80 text-xs uppercase text-slate-500 font-semibold border-b border-slate-100">
                         <tr>
-                          <td colSpan={5} className="px-6 py-8 text-center text-slate-400 text-sm">
-                            No subject score entries found for this term.
-                          </td>
+                          <th className="px-6 py-3.5">Subject</th>
+                          <th className="px-4 py-3.5">Code</th>
+                          <th className="px-6 py-3.5">Instructor / Teacher</th>
+                          <th className="px-4 py-3.5 text-center">Score</th>
+                          <th className="px-4 py-3.5 text-center">Grade</th>
+                          <th className="px-6 py-3.5 text-right">Remarks</th>
                         </tr>
-                      ) : (
-                        resultsData.results.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50/70 transition">
-                            <td className="px-6 py-4 font-mono text-xs font-semibold text-brand-700 whitespace-nowrap">
-                              {item.subject_code}
-                            </td>
-                            <td className="px-6 py-4 font-bold text-navy-900 whitespace-nowrap">
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {resultsData.results.map((item) => (
+                          <tr key={item.subject_id} className="hover:bg-slate-50/60 transition">
+                            <td className="px-6 py-4 font-semibold text-slate-900">
                               {item.subject_name}
                             </td>
-                            <td className="px-6 py-4 text-xs font-medium text-slate-600 whitespace-nowrap">
-                              {item.teacher_name || "Assigned Faculty"}
+                            <td className="px-4 py-4 font-mono text-xs text-slate-600">
+                              {item.subject_code}
                             </td>
-                            <td className="px-6 py-4 text-center font-extrabold text-base text-slate-900 whitespace-nowrap">
-                              {item.score} / 100
+                            <td className="px-6 py-4 text-xs font-medium text-slate-700">
+                              {/* Teacher Names Displayed Directly on Result Sheet */}
+                              {item.teacher_name ? (
+                                <span className="inline-flex items-center gap-1.5 text-slate-800 font-semibold">
+                                  <span>{item.teacher_name}</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 italic">Department Faculty</span>
+                              )}
                             </td>
-                            <td className="px-6 py-4 text-center whitespace-nowrap">
+                            <td className="px-4 py-4 text-center font-bold text-slate-900">
+                              {item.score}
+                            </td>
+                            <td className="px-4 py-4 text-center">
                               <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                                className={`inline-block px-2.5 py-1 rounded-md text-xs font-extrabold ${
                                   item.grade === "A"
-                                    ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                    ? "bg-emerald-100 text-emerald-800"
                                     : item.grade === "B"
-                                    ? "bg-sky-100 text-sky-800 border-sky-200"
+                                    ? "bg-blue-100 text-blue-800"
                                     : item.grade === "C"
-                                    ? "bg-amber-100 text-amber-800 border-amber-200"
-                                    : "bg-rose-100 text-rose-800 border-rose-200"
+                                    ? "bg-sky-100 text-sky-800"
+                                    : item.grade === "D"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-rose-100 text-rose-800"
                                 }`}
                               >
                                 {item.grade}
                               </span>
                             </td>
+                            <td className="px-6 py-4 text-right text-xs font-medium">
+                              {item.score >= 70 ? (
+                                <span className="text-emerald-700">Excellent Distinction</span>
+                              ) : item.score >= 60 ? (
+                                <span className="text-blue-700">Credit Performance</span>
+                              ) : item.score >= 50 ? (
+                                <span className="text-slate-700">Satisfactory Pass</span>
+                              ) : item.score >= 40 ? (
+                                <span className="text-amber-700">Pass</span>
+                              ) : (
+                                <span className="text-rose-600 font-bold">Unsatisfactory</span>
+                              )}
+                            </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Grading Scale Legend */}
-                <div className="mt-6 pt-4 border-t border-slate-100 text-[11px] text-slate-500 flex flex-wrap gap-4 items-center justify-between">
-                  <div>
-                    <strong>Grading Key:</strong> A: 70-100 (Distinction) | B: 60-69 (Very Good) | C: 50-59 (Credit) | D: 40-49 (Pass) | F: 0-39 (Fail)
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  <div>Rev. Fr. Benedict, Exams &amp; Records</div>
+                )}
+              </div>
+
+              {/* Grading Legend & Verification Footer */}
+              <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200/70 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-4">
+                  <span className="font-bold text-slate-700">Grading Key:</span>
+                  <span>A: 70–100% (Distinction)</span>
+                  <span>B: 60–69% (Very Good)</span>
+                  <span>C: 50–59% (Credit)</span>
+                  <span>D: 40–49% (Pass)</span>
+                  <span>F: 0–39% (Fail)</span>
+                </div>
+                <div className="text-[11px] text-slate-400 print:text-slate-600 font-mono">
+                  Report Generated: {new Date().toLocaleDateString()}
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       </AppLayout>
     </ProtectedRoute>
